@@ -110,11 +110,51 @@ User-Agent や Referer の偽装では突破できない。
 
 ---
 
+### 試行5: GitHub Search API（claude関連リポジトリのトレンド調査）
+
+**目的**: api.github.com が使えることを活かし、Search API でトレンドを調査する
+
+**エンドポイント**:
+```
+https://api.github.com/search/repositories?q=claude&sort=stars&order=desc&per_page=10
+https://api.github.com/search/repositories?q=claude+created:>2026-03-19&sort=stars&order=desc&per_page=5
+```
+
+**結果**: ✅ 成功
+
+**注意点**:
+- レスポンスJSON が22,000トークン超となり、Claudeが直接読めなかった
+- `jq` コマンドは Remote Trigger 環境に存在しない
+- Claude が自律的に Python でパース処理を行い解決した
+
+**取得結果（スター数TOP10・2026-03-26時点）**:
+
+| # | リポジトリ | スター数 | 言語 | 概要 |
+|---|-----------|---------|------|------|
+| 1 | f/prompts.chat | ★154,268 | HTML | Awesome ChatGPT Prompts |
+| 2 | x1xhlol/system-prompts-and-models-of-ai-tools | ★133,274 | — | AI tools system prompts集 |
+| 3 | affaan-m/everything-claude-code | ★108,700 | JavaScript | Claude Code最適化システム |
+| 4 | ChatGPTNextWeb/NextChat | ★87,582 | TypeScript | AI Assistant（Web/iOS/Mac他） |
+| 5 | anthropics/claude-code | ★82,893 | Shell | Claude Code 公式リポジトリ |
+| 6 | lobehub/lobehub | ★74,325 | TypeScript | AIワークスペース |
+| 7 | nextlevelbuilder/ui-ux-pro-max-skill | ★51,071 | Python | Claude UI/UXスキル |
+| 8 | garrytan/gstack | ★48,169 | TypeScript | Garry Tan's Claude Code設定集 |
+| 9 | ComposioHQ/awesome-claude-skills | ★47,964 | Python | Awesome Claude Skills |
+| 10 | tw93/Pake | ★47,006 | Rust | デスクトップアプリビルダー |
+
+**考察**:
+- GitHub Search API は制限なく利用可能（認証不要・rate limit 10req/分）
+- 大きなレスポンスは `jq` なしでも Python で対処できる
+- Claude 関連リポジトリは非常に活発で、スター数上位にはスキル・プロンプト・ラッパー系が多い
+
+---
+
 ## 総合結果
 
 | サービス | URL | 結果 | 原因推定 |
 |----------|-----|------|----------|
 | GitHub API | api.github.com | ✅ 成功 | 制限なし |
+| GitHub Search API | api.github.com/search | ✅ 成功 | 制限なし（rate limit あり） |
 | Yahoo Finance | query1/query2.finance.yahoo.com | ❌ タイムアウト | IP制限 |
 | stooq.com | stooq.com | ❌ exit code 56 | 接続切断 |
 | 気象庁 | www.jma.go.jp | ❌ 403 Forbidden | IPジオブロッキング（日本国内のみ許可） |

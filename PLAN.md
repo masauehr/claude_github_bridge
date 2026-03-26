@@ -1,70 +1,79 @@
 # PLAN.md — 実装計画
 
-## フェーズ1: 基盤構築（最初のマイルストーン）
-
-### 1-1. 環境セットアップ
-- [ ] `requirements.txt` 作成（anthropic, PyGithub, python-dotenv）
-- [ ] `.env.example` 作成
-- [ ] `.gitignore` 作成
-
-### 1-2. Claude APIクライアント（`src/claude_client.py`）
-- [ ] `anthropic` SDKを使った基本的なメッセージ送受信
-- [ ] システムプロンプトのテンプレート管理
-- [ ] エラーハンドリング
-
-### 1-3. GitHub APIクライアント（`src/github_client.py`）
-- [ ] Issue取得・コメント投稿
-- [ ] PR差分取得・レビュー投稿
-- [ ] ファイル読み取り・コミット
-
-### 1-4. ブリッジロジック（`src/bridge.py`）
-- [ ] GitHubデータ → Claude入力フォーマット変換
-- [ ] Claude出力 → GitHub書き込み処理
+> **注記**: このプロジェクトは2026-03-26に実験完了。
+> 実際に検証した内容は [EXPERIMENT_REPORT.md](./EXPERIMENT_REPORT.md) を参照。
 
 ---
 
-## フェーズ2: ユースケース実装
+## 当初の計画
 
-### 2-1. Issue要約（`examples/summarize_issue.py`）
-- [ ] Issue本文 + コメント履歴をClaudeに渡す
-- [ ] 要約結果をIssueコメントとして投稿
+### フェーズ1: 基盤構築
 
-### 2-2. PRコードレビュー（`examples/review_pr.py`）
-- [ ] PR差分（unified diff）をClaudeに渡す
-- [ ] レビューコメントをPRに投稿
+- Claude Code CLI + gh CLI を組み合わせた連携スクリプト → **実装済み** (`scripts/run_github_task.sh`)
+- Remote Trigger による定期実行 → **実装・検証済み**
 
----
+### フェーズ2: ユースケース実装
 
-## フェーズ3: 応用・自動化（将来検討）
+#### Issue要約・PRレビュー
+- `run_github_task.sh summarize-issue` → **実装済み**
+- `run_github_task.sh review-pr` → **実装済み**
 
-- [ ] GitHub Actionsとの連携（Webhook or workflow）
-- [ ] 複数Issueのバッチ処理
-- [ ] ラベル自動分類
-- [ ] リリースノート自動生成
+#### 外部データ取得（週次レポート）
+- 日経平均データ（Yahoo Finance / stooq.com） → **❌ Remote Trigger環境から接続不可**
+- 気象庁天気予報 → **❌ IPジオブロッキングにより接続不可**
+- GitHub Search API → **✅ 成功**
+
+### フェーズ3: 応用・自動化（今後の参考）
+
+Remote Trigger 環境では `api.github.com` のみ安定利用可能なため、
+以下は GitHub API の範囲内で実現可能:
+
+- Issue / PR の自動要約・レビュー投稿（`GITHUB_TOKEN` 設定が必要）
+- GitHub Search API を使ったトレンドレポート生成
+- リポジトリ統計の定期レポート
+
+日本国内データ（気象・金融）を使う場合は、macOS launchd やローカル実行が現実的。
 
 ---
 
 ## 技術メモ
 
-### Claude APIの基本パターン
-```python
-import anthropic
+### Remote Trigger の制約（検証済み）
 
-client = anthropic.Anthropic()
-message = client.messages.create(
-    model="claude-opus-4-6",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": "ここにGitHubのデータを渡す"}]
-)
-print(message.content[0].text)
+- 利用可能ツール: `Bash`, `Read`, `Glob`, `Grep`
+- `jq` コマンドは存在しない → Python で代替可能
+- 外部アクセス: `api.github.com` のみ安定。日本国内向けAPIはIPブロックされる
+
+### Claude CLI 実行パターン
+
+```bash
+echo "$PROMPT" | ~/.local/bin/claude \
+  --print \
+  --dangerously-skip-permissions \
+  --model sonnet \
+  --max-budget-usd 0.50 \
+  --allowedTools "Bash,Read,Write,Edit,WebFetch,WebSearch,Glob,Grep" \
+  --input-format text
 ```
 
-### GitHub APIの基本パターン
-```python
-from github import Github
+### GitHub API（認証なし・読み取り）
 
-g = Github(token)
-repo = g.get_repo("owner/repo")
-issue = repo.get_issue(number=123)
-issue.create_comment("Claudeの出力結果")
+```bash
+# リポジトリ情報
+curl -s "https://api.github.com/repos/owner/repo"
+
+# Issue一覧
+curl -s "https://api.github.com/repos/owner/repo/issues?state=open"
+
+# Search API
+curl -s "https://api.github.com/search/repositories?q=claude&sort=stars"
+```
+
+### GitHub API（書き込み・GITHUB_TOKEN 必要）
+
+```bash
+curl -s -X PUT "https://api.github.com/repos/owner/repo/contents/path/to/file" \
+  -H "Authorization: token $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "コミットメッセージ", "content": "<base64>"}'
 ```
